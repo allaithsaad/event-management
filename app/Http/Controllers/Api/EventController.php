@@ -8,12 +8,20 @@ use App\Models\Event;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Http\Traits\CanLoadRelationships;
+use Illuminate\Support\Facades\Gate;
 
 class EventController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
+    use CanLoadRelationships;
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum')->except(['index', 'show']);
+        $this->authorizeResource(Event::class, 'event');
+    }
     public function index()
     {
         $query = Event::query();
@@ -22,7 +30,7 @@ class EventController extends Controller
         foreach ($relations as $relation) {
             $query->when(
                 $this->shouldIncludeRelation($relation),
-                fn($q) => $q->with($relation)
+                fn ($q) => $q->with($relation)
             );
         }
 
@@ -31,18 +39,7 @@ class EventController extends Controller
         );
     }
 
-    protected function shouldIncludeRelation(string $relation): bool
-    {
-        $include = request()->query('include');
 
-        if (!$include) {
-            return false;
-        }
-
-        $relations = array_map('trim', explode(',', $include));
-
-        return in_array($relation, $relations);
-    }
 
     /**
      * Store a newly created resource in storage.
@@ -56,7 +53,7 @@ class EventController extends Controller
                 'description' => 'nullable|string',
                 'start_time' => 'required|date',
                 'end_time' => 'required|date|after:start_time',
-            ]), 'user_id' => 1
+            ]), 'user_id' => $request->user()->id
         ]);
         return response()->json($event, 201);
     }
@@ -74,10 +71,14 @@ class EventController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(Request $request, Event $event)
     {
+        // if (Gate::denies('update-event', $event)) {
+        //     abort(403, 'Unauthorized Action');
+        // }
+        // $this->authorize('update-event', $event);
         try {
-            $event = Event::findOrFail($id);
+            $event = Event::findOrFail($event->id);
             $event->update($request->validate([
                 'name' => 'sometimes|string|max:255',
                 'description' => 'nullable|string',
